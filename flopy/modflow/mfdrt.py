@@ -20,7 +20,7 @@ class ModflowDrt(Package):
 
     Parameters
     ----------
-    model : model object
+    model : model object #######################dddd
         The model object (of type :class:`flopy.modflow.mf.Modflow`) to which
         this package will be added.
     ipakcb : int
