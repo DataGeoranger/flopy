@@ -13,7 +13,7 @@ class DataType(Enum):
     transientscalar = 8
 
 
-class DataInterface(object):
+class DataInterface:
     @property
     @abc.abstractmethod
     def data_type(self):
@@ -52,13 +52,13 @@ class DataInterface(object):
 
     @property
     @abc.abstractmethod
-    def plotable(self):
+    def plottable(self):
         raise NotImplementedError(
-            "must define plotable in child " "class to use this base class"
+            "must define plottable in child " "class to use this base class"
         )
 
 
-class DataListInterface(object):
+class DataListInterface:
     @property
     @abc.abstractmethod
     def package(self):

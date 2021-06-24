@@ -157,8 +157,8 @@ class ModflowDisU(Package):
         Number of time steps in each stress period (default is 1).
     tsmult : float or array of floats (nper)
         Time step multiplier (default is 1.0).
-    steady : boolean or array of boolean (nper)
-        true or False indicating whether or not stress period is steady state
+    steady : bool or array of bool (nper)
+        True or False indicating whether or not stress period is steady state
         (default is True).
     extension : string
         Filename extension (default is 'dis')
@@ -226,7 +226,7 @@ class ModflowDisU(Package):
         extension="disu",
         unitnumber=None,
         filenames=None,
-        start_datetime="1/1/1970",
+        start_datetime=None,
     ):
 
         # set default unit number of one is not specified
@@ -358,6 +358,9 @@ class ModflowDisU(Package):
         assert self.iac.array.sum() == njag, "The sum of iac must equal njag."
         if ja is None:
             raise Exception("ja must be provided")
+        if ja[0] == 0:
+            # convert from zero-based to one-based
+            ja += 1
         self.ja = Util2d(
             model,
             (self.njag,),
@@ -439,9 +442,7 @@ class ModflowDisU(Package):
         self.tsmult = Util2d(
             model, (self.nper,), np.float32, tsmult, name="tsmult"
         )
-        self.steady = Util2d(
-            model, (self.nper,), np.bool, steady, name="steady"
-        )
+        self.steady = Util2d(model, (self.nper,), bool, steady, name="steady")
 
         self.itmuni_dict = {
             0: "undefined",
@@ -547,7 +548,7 @@ class ModflowDisU(Package):
             handle.  In this case ext_unit_dict is required, which can be
             constructed using the function
             :class:`flopy.utils.mfreadnam.parsenamefile`.
-        check : boolean
+        check : bool
             Check package data for common errors. (default False; not setup yet)
 
         Returns

@@ -4,7 +4,7 @@ import warnings
 from ..utils import geometry
 
 
-class CachedData(object):
+class CachedData:
     def __init__(self, data):
         self._data = data
         self.out_of_date = False
@@ -22,45 +22,46 @@ class CachedData(object):
         self.out_of_date = False
 
 
-class Grid(object):
+class Grid:
     """
     Base class for a structured or unstructured model grid
 
     Parameters
     ----------
     grid_type : enumeration
-        type of model grid ('structured', 'vertex_layered',
-        'vertex_unlayered')
-    top : ndarray(np.float)
+        type of model grid ('structured', 'vertex', 'unstructured')
+    top : ndarray(float)
         top elevations of cells in topmost layer
-    botm : ndarray(np.float)
+    botm : ndarray(float)
         bottom elevations of all cells
-    idomain : ndarray(np.int)
+    idomain : ndarray(int)
         ibound/idomain value for each cell
-    lenuni : ndarray(np.int)
+    lenuni : ndarray(int)
         model length units
-    origin_loc : str
-        Corner of the model grid that is the model origin
-        'ul' (upper left corner) or 'll' (lower left corner)
-    origin_x : float
+    espg : str, int
+        optional espg projection code
+    proj4 : str
+        optional proj4 projection string code
+    prj : str
+        optional projection file name path
+    xoff : float
         x coordinate of the origin point (lower left corner of model grid)
         in the spatial reference coordinate system
-    origin_y : float
+    yoff : float
         y coordinate of the origin point (lower left corner of model grid)
         in the spatial reference coordinate system
-    rotation : float
+    angrot : float
         rotation angle of model grid, as it is rotated around the origin point
 
     Attributes
     ----------
     grid_type : enumeration
-        type of model grid ('structured', 'vertex_layered',
-        'vertex_unlayered')
-    top : ndarray(np.float)
+        type of model grid ('structured', 'vertex', 'unstructured')
+    top : ndarray(float)
         top elevations of cells in topmost layer
-    botm : ndarray(np.float)
+    botm : ndarray(float)
         bottom elevations of all cells
-    idomain : ndarray(np.int)
+    idomain : ndarray(int)
         ibound/idomain value for each cell
     proj4 : proj4 SpatialReference
         spatial reference locates the grid in a coordinate system
@@ -68,14 +69,16 @@ class Grid(object):
         spatial reference locates the grid in a coordinate system
     lenuni : int
         modflow lenuni parameter
-    origin_x : float
+    xoffset : float
         x coordinate of the origin point in the spatial reference coordinate
         system
-    origin_y : float
+    yoffset : float
         y coordinate of the origin point in the spatial reference coordinate
         system
-    rotation : float
+    angrot : float
         rotation angle of model grid, as it is rotated around the origin point
+    angrot_radians : float
+        rotation angle of model grid, in radians
     xgrid : ndarray
         returns numpy meshgrid of x edges in reference frame defined by
         point_type
@@ -171,6 +174,7 @@ class Grid(object):
         if angrot is None:
             angrot = 0.0
         self._angrot = angrot
+        self._polygons = None
         self._cache_dict = {}
         self._copy_cache = True
 
@@ -292,6 +296,10 @@ class Grid(object):
         return copy.deepcopy(self._idomain)
 
     @property
+    def ncpl(self):
+        raise NotImplementedError("must define ncpl in child class")
+
+    @property
     def nnodes(self):
         raise NotImplementedError("must define nnodes in child class")
 
@@ -322,9 +330,17 @@ class Grid(object):
     def xcellcenters(self):
         return self.xyzcellcenters[0]
 
+    def get_xcellcenters_for_layer(self, layer):
+        # default is not layer dependent; must override for unstructured grid
+        return self.xcellcenters
+
     @property
     def ycellcenters(self):
         return self.xyzcellcenters[1]
+
+    def get_ycellcenters_for_layer(self, layer):
+        # default is not layer dependent; must override for unstructured grid
+        return self.ycellcenters
 
     @property
     def zcellcenters(self):
@@ -341,9 +357,17 @@ class Grid(object):
     def xvertices(self):
         return self.xyzvertices[0]
 
+    def get_xvertices_for_layer(self, layer):
+        # default is not layer dependent; must override for unstructured grid
+        return self.xvertices
+
     @property
     def yvertices(self):
         return self.xyzvertices[1]
+
+    def get_yvertices_for_layer(self, layer):
+        # default is not layer dependent; must override for unstructured grid
+        return self.yvertices
 
     @property
     def zvertices(self):
@@ -358,6 +382,152 @@ class Grid(object):
     #    raise NotImplementedError(
     #        'must define indices in child '
     #        'class to use this base class')
+    @property
+    def cross_section_vertices(self):
+        return self.xyzvertices[0], self.xyzvertices[1]
+
+    def cross_section_lay_ncpl_ncb(self, ncb):
+        """
+        Get PlotCrossSection compatible layers, ncpl, and ncb
+        variables
+
+        Parameters
+        ----------
+        ncb : int
+            number of confining beds
+
+        Returns
+        -------
+            tuple : (int, int, int) layers, ncpl, ncb
+        """
+        return self.nlay, self.ncpl, ncb
+
+    def cross_section_nodeskip(self, nlay, xypts):
+        """
+        Get a nodeskip list for PlotCrossSection. This is a correction
+        for UnstructuredGridPlotting
+
+        Parameters
+        ----------
+        nlay : int
+            nlay is nlay + ncb
+        xypts : dict
+            dictionary of node number and xyvertices of a cross-section
+
+        Returns
+        -------
+            list : n-dimensional list of nodes to not plot for each layer
+        """
+        return [[] for _ in range(nlay)]
+
+    def cross_section_adjust_indicies(self, k, cbcnt):
+        """
+        Method to get adjusted indicies by layer and confining bed
+        for PlotCrossSection plotting
+
+        Parameters
+        ----------
+        k : int
+            zero based layer number
+        cbcnt : int
+            confining bed counter
+
+        Returns
+        -------
+            tuple: (int, int, int) (adjusted layer, nodeskip layer, node
+            adjustment value based on number of confining beds and the layer)
+        """
+        adjnn = k * self.ncpl
+        ncbnn = adjnn - (cbcnt * self.ncpl)
+        return k + 1, k + 1, ncbnn
+
+    def cross_section_set_contour_arrays(
+        self, plotarray, xcenters, head, elev, projpts
+    ):
+        """
+        Method to set countour array centers for rare instances where
+        matplotlib contouring is prefered over trimesh plotting
+
+        Parameters
+        ----------
+        plotarray : np.ndarray
+            array of data for contouring
+        xcenters : np.ndarray
+            xcenters array
+        zcenters : np.ndarray
+            zcenters array
+        head : np.ndarray
+            head array to adjust cell centers location
+        elev : np.ndarray
+            cell elevation array
+        projpts : dict
+            dictionary of projected cross sectional vertices
+
+        Returns
+        -------
+            tuple: (np.ndarray, np.ndarray, np.ndarray, bool)
+            plotarray, xcenter array, ycenter array, and a boolean flag
+            for contouring
+        """
+        if self.nlay != 1:
+            return plotarray, xcenters, None, False
+        else:
+            zcenters = []
+            if isinstance(head, np.ndarray):
+                head = head.reshape(1, self.ncpl)
+                head = np.vstack((head, head))
+            else:
+                head = elev.reshape(2, self.ncpl)
+
+            elev = elev.reshape(2, self.ncpl)
+            for k, ev in enumerate(elev):
+                if k == 0:
+                    zc = [
+                        ev[i] if head[k][i] > ev[i] else head[k][i]
+                        for i in sorted(projpts)
+                    ]
+                else:
+                    zc = [ev[i] for i in sorted(projpts)]
+                zcenters.append(zc)
+
+            plotarray = np.vstack((plotarray, plotarray))
+            xcenters = np.vstack((xcenters, xcenters))
+            zcenters = np.array(zcenters)
+
+            return plotarray, xcenters, zcenters, True
+
+    @property
+    def map_polygons(self):
+        raise NotImplementedError("must define map_polygons in child class")
+
+    def get_plottable_layer_array(self, plotarray, layer):
+        raise NotImplementedError(
+            "must define get_plottable_layer_array in child class"
+        )
+
+    def get_number_plottable_layers(self, a):
+        raise NotImplementedError(
+            "must define get_number_plottable_layers in child class"
+        )
+
+    def get_plottable_layer_shape(self, layer=None):
+        """
+        Determine the shape that is required in order to plot a 2d array for
+        this grid.  For a regular MODFLOW grid, this is (nrow, ncol).  For
+        a vertex grid, this is (ncpl,) and for an unstructured grid this is
+        (ncpl[layer],).
+
+        Parameters
+        ----------
+        layer : int
+            Has no effect unless grid changes by layer
+
+        Returns
+        -------
+        shape : tuple
+            required shape of array to plot for a layer
+        """
+        return self.shape[1:]
 
     def get_coords(self, x, y):
         """
@@ -368,7 +538,7 @@ class Grid(object):
             x = np.array(x)
             y = np.array(y)
         if not np.isscalar(x):
-            x, y = x.copy(), y.copy()
+            x, y = x.astype(float, copy=True), y.astype(float, copy=True)
 
         x += self._xoff
         y += self._yoff
@@ -387,11 +557,11 @@ class Grid(object):
         if not np.isscalar(x):
             x, y = x.copy(), y.copy()
 
-        x, y = geometry.rotate(
-            x, y, self._xoff, self._yoff, -self.angrot_radians
+        x, y = geometry.transform(
+            x, y, self._xoff, self._yoff, self.angrot_radians, inverse=True
         )
-        x -= self._xoff
-        y -= self._yoff
+        # x -= self._xoff
+        # y -= self._yoff
 
         return x, y
 
@@ -597,7 +767,9 @@ class Grid(object):
         if self.top is not None and self.botm is not None:
             zcenters = []
             top_3d = np.expand_dims(self.top, 0)
-            zbdryelevs = np.concatenate((top_3d, self.botm), axis=0)
+            zbdryelevs = np.concatenate(
+                (top_3d, np.atleast_2d(self.botm)), axis=0
+            )
 
             for ix in range(1, len(zbdryelevs)):
                 zcenters.append((zbdryelevs[ix - 1] + zbdryelevs[ix]) / 2.0)
@@ -605,3 +777,18 @@ class Grid(object):
             zbdryelevs = None
             zcenters = None
         return zbdryelevs, zcenters
+
+    # Exporting
+    def write_shapefile(self, filename="grid.shp", epsg=None, prj=None):
+        """
+        Write a shapefile of the grid with just the row and column attributes.
+
+        """
+        from ..export.shapefile_utils import write_grid_shapefile
+
+        if epsg is None and prj is None:
+            epsg = self.epsg
+        write_grid_shapefile(
+            filename, self, array_dict={}, nan_val=-1.0e9, epsg=epsg, prj=prj
+        )
+        return

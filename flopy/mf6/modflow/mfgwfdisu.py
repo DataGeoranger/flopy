@@ -1,5 +1,6 @@
 # DO NOT MODIFY THIS FILE DIRECTLY.  THIS FILE MUST BE CREATED BY
 # mf6/utils/createpackages.py
+# FILE created on March 19, 2021 03:08:37 UTC
 from .. import mfpackage
 from ..data.mfdatautil import ArrayTemplateGenerator, ListTemplateGenerator
 
@@ -74,8 +75,8 @@ class ModflowGwfdisu(mfpackage.MFPackage):
           for a cell is 0, the cell does not exist in the simulation. Input and
           output values will be read and written for the cell, but internal to
           the program, the cell is excluded from the solution. If the IDOMAIN
-          value for a cell is 1, the cell exists in the simulation. IDOMAIN
-          values of -1 cannot be specified for the DISU Package.
+          value for a cell is 1 or greater, the cell exists in the simulation.
+          IDOMAIN values of -1 cannot be specified for the DISU Package.
     iac : [integer]
         * iac (integer) is the number of connections (plus 1) for each cell.
           The sum of all the entries in IAC must be equal to NJA.
@@ -161,7 +162,11 @@ class ModflowGwfdisu(mfpackage.MFPackage):
           cell. There may be a different number of vertices for each cell.
         * icvert (integer) is an array of integer values containing vertex
           numbers (in the VERTICES block) used to define the cell. Vertices
-          must be listed in clockwise order.
+          must be listed in clockwise order. This argument is an index
+          variable, which means that it should be treated as zero-based when
+          working with FloPy and Python. Flopy will automatically subtract one
+          when loading index variables and add one when writing index
+          variables.
     filename : String
         File name for this package.
     pname : String
@@ -415,6 +420,7 @@ class ModflowGwfdisu(mfpackage.MFPackage):
             "tagged false",
             "reader urword",
             "optional false",
+            "numeric_index true",
         ],
     ]
 
@@ -446,7 +452,7 @@ class ModflowGwfdisu(mfpackage.MFPackage):
         pname=None,
         parent_file=None,
     ):
-        super(ModflowGwfdisu, self).__init__(
+        super().__init__(
             model, "disu", filename, pname, loading_package, parent_file
         )
 

@@ -1,5 +1,6 @@
 # DO NOT MODIFY THIS FILE DIRECTLY.  THIS FILE MUST BE CREATED BY
 # mf6/utils/createpackages.py
+# FILE created on March 19, 2021 03:08:37 UTC
 from .. import mfpackage
 from ..data.mfdatautil import ArrayTemplateGenerator
 
@@ -63,8 +64,8 @@ class ModflowGwfdis(mfpackage.MFPackage):
           for a cell is 0, the cell does not exist in the simulation. Input and
           output values will be read and written for the cell, but internal to
           the program, the cell is excluded from the solution. If the IDOMAIN
-          value for a cell is 1, the cell exists in the simulation. If the
-          IDOMAIN value for a cell is -1, the cell does not exist in the
+          value for a cell is 1 or greater, the cell exists in the simulation.
+          If the IDOMAIN value for a cell is -1, the cell does not exist in the
           simulation. Furthermore, the first existing cell above will be
           connected to the first existing cell below. This type of cell is
           referred to as a "vertical pass through" cell.
@@ -213,7 +214,7 @@ class ModflowGwfdis(mfpackage.MFPackage):
         pname=None,
         parent_file=None,
     ):
-        super(ModflowGwfdis, self).__init__(
+        super().__init__(
             model, "dis", filename, pname, loading_package, parent_file
         )
 

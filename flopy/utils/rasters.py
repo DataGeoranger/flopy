@@ -1,4 +1,6 @@
 import numpy as np
+import threading
+import queue
 
 try:
     import rasterio
@@ -15,13 +17,8 @@ try:
 except ImportError:
     scipy = None
 
-try:
-    import shapely
-except ImportError:
-    shapely = None
 
-
-class Raster(object):
+class Raster:
     """
     The Raster object is used for cropping, sampling raster values,
     and re-sampling raster values to grids, and provides methods to
@@ -56,11 +53,11 @@ class Raster(object):
 
     """
 
-    FLOAT32 = (float, np.float, np.float32, np.float_)
+    FLOAT32 = (float, np.float32, np.float_)
     FLOAT64 = (np.float64,)
     INT8 = (np.int8,)
     INT16 = (np.int16,)
-    INT32 = (int, np.int, np.int32, np.int_)
+    INT32 = (int, np.int32, np.uint32)
     INT64 = (np.int64,)
 
     def __init__(
@@ -89,6 +86,9 @@ class Raster(object):
             )
             raise ImportError(msg)
 
+        from .geometry import point_in_polygon
+
+        self._point_in_polygon = point_in_polygon
         self._array = array
         self._bands = bands
 
@@ -234,17 +234,21 @@ class Raster(object):
         y = np.linspace(y1, y0, ylen)
         self.__xcenters, self.__ycenters = np.meshgrid(x, y)
 
-    def sample_point(self, x, y, band):
+    def sample_point(self, *point, band=1):
         """
         Method to get nearest raster value at a user provided
         point
 
         Parameters
         ----------
-        x : float
-            x coordinate
-        y : float
-            y coordinate
+        *point : point geometry representation
+            accepted data types:
+            x, y values : ex. sample_point(1, 3, band=1)
+            tuple of x, y: ex sample_point((1, 3), band=1)
+            shapely.geometry.Point
+            geojson.Point
+            flopy.geometry.Point
+
         band : int
             raster band to re-sample
 
@@ -252,6 +256,15 @@ class Raster(object):
         -------
             value : float
         """
+        from .geospatial_utils import GeoSpatialUtil
+
+        if isinstance(point[0], (tuple, list, np.ndarray)):
+            point = point[0]
+
+        geom = GeoSpatialUtil(point, shapetype="Point")
+
+        x, y = geom.points
+
         # 1: get grid.
         rxc = self.xcenters
         ryc = self.ycenters
@@ -282,14 +295,14 @@ class Raster(object):
 
         Parameters
         ----------
-        polygon : (shapely.geometry.Polygon or GeoJSON-like dict)
-            The values should be a GeoJSON-like dict or object
-            implements the Python geo interface protocal.
+        polygon : list, geojson, shapely.geometry, shapefile.Shape
+            sample_polygon method accepts any of these geometries:
 
-            Alternatively if the user supplies the vectors
-            of a polygon in the format [(x0, y0), ..., (xn, yn)]
-            a single shapely polygon will be created for
-            cropping the data
+            a list of (x, y) points, ex. [(x1, y1), ...]
+            geojson Polygon object
+            shapely Polygon object
+            shapefile Polygon shape
+            flopy Polygon shape
 
         band : int
             raster band to re-sample
@@ -328,7 +341,14 @@ class Raster(object):
 
         return arr_dict[band]
 
-    def resample_to_grid(self, xc, yc, band, method="nearest"):
+    def resample_to_grid(
+        self,
+        modelgrid,
+        band,
+        method="nearest",
+        multithread=False,
+        thread_pool=2,
+    ):
         """
         Method to resample the raster data to a
         user supplied grid of x, y coordinates.
@@ -338,10 +358,8 @@ class Raster(object):
 
         Parameters
         ----------
-        xc : np.ndarray or list
-            an array of x-cell centers
-        yc : np.ndarray or list
-            an array of y-cell centers
+        modelgrid : flopy.Grid object
+            model grid to sample data from
         band : int
             raster band to re-sample
         method : str
@@ -363,26 +381,75 @@ class Raster(object):
         else:
             from scipy.interpolate import griddata
 
-        data_shape = xc.shape
-        xc = xc.flatten()
-        yc = yc.flatten()
-        # step 1: create grid from raster bounds
-        rxc = self.xcenters
-        ryc = self.ycenters
+        method = method.lower()
+        if method in ("linear", "nearest", "cubic"):
+            xc = modelgrid.xcellcenters
+            yc = modelgrid.ycellcenters
 
-        # step 2: flatten grid
-        rxc = rxc.flatten()
-        ryc = ryc.flatten()
+            data_shape = xc.shape
+            xc = xc.flatten()
+            yc = yc.flatten()
+            # step 1: create grid from raster bounds
+            rxc = self.xcenters
+            ryc = self.ycenters
 
-        # step 3: get array
-        if method == "cubic":
-            arr = self.get_array(band, masked=False)
+            # step 2: flatten grid
+            rxc = rxc.flatten()
+            ryc = ryc.flatten()
+
+            # step 3: get array
+            if method == "cubic":
+                arr = self.get_array(band, masked=False)
+            else:
+                arr = self.get_array(band, masked=True)
+            arr = arr.flatten()
+
+            # step 3: use griddata interpolation to snap to grid
+            data = griddata((rxc, ryc), arr, (xc, yc), method=method)
+
+        elif method in ("median", "mean"):
+            # these methods are slow and could use a speed u
+            ncpl = modelgrid.ncpl
+            data_shape = modelgrid.xcellcenters.shape
+            if isinstance(ncpl, (list, np.ndarray)):
+                ncpl = ncpl[0]
+
+            data = np.zeros((ncpl,), dtype=float)
+
+            if multithread:
+                q = queue.Queue()
+                container = threading.BoundedSemaphore(thread_pool)
+                threads = []
+                for node in range(ncpl):
+                    t = threading.Thread(
+                        target=self.__threaded_resampling,
+                        args=(modelgrid, node, band, method, container, q),
+                    )
+                    threads.append(t)
+
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+
+                for _ in range(len(threads)):
+                    node, val = q.get()
+                    data[node] = val
+            else:
+                for node in range(ncpl):
+                    verts = modelgrid.get_cell_vertices(node)
+                    rstr_data = self.sample_polygon(verts, band)
+                    msk = np.in1d(rstr_data, self.nodatavals)
+                    rstr_data[msk] = np.nan
+
+                    if method == "median":
+                        val = np.nanmedian(rstr_data)
+                    else:
+                        val = np.nanmean(rstr_data)
+
+                    data[node] = val
         else:
-            arr = self.get_array(band, masked=True)
-        arr = arr.flatten()
-
-        # step 3: use griddata interpolation to snap to grid
-        data = griddata((rxc, ryc), arr, (xc, yc), method=method)
+            raise TypeError("{} method not supported".format(method))
 
         # step 4: return grid to user in shape provided
         data.shape = data_shape
@@ -392,6 +459,42 @@ class Raster(object):
 
         return data
 
+    def __threaded_resampling(
+        self, modelgrid, node, band, method, container, q
+    ):
+        """
+        Threaded resampling handler to speed up bottlenecks
+
+        Parameters
+        ----------
+        modelgrid : flopy.discretization.Grid object
+            flopy grid to sample to
+        node : int
+            node number
+        band : int
+            raster band to sample from
+        method : str
+            resampling method
+        container : threading.BoundedSemaphore
+        q : queue.Queue
+
+        Returns
+        -------
+            None
+        """
+        container.acquire()
+        verts = modelgrid.get_cell_vertices(node)
+        rstr_data = self.sample_polygon(verts, band)
+        msk = np.in1d(rstr_data, self.nodatavals)
+        rstr_data[msk] = np.nan
+
+        if method == "median":
+            val = np.nanmedian(rstr_data)
+        else:
+            val = np.nanmean(rstr_data)
+        q.put((node, val))
+        container.release()
+
     def crop(self, polygon, invert=False):
         """
         Method to crop a new raster object
@@ -399,14 +502,14 @@ class Raster(object):
 
         Parameters
         ----------
-        polygon : (shapely.geometry.Polygon or GeoJSON-like dict)
-            The values should be a GeoJSON-like dict or object
-            implements the Python geo interface protocal.
+        polygon : list, geojson, shapely.geometry, shapefile.Shape
+            crop method accepts any of these geometries:
 
-            Alternatively if the user supplies the vectors
-            of a polygon in the format [(x0, y0), ..., (xn, yn)]
-            a single shapely polygon will be created for
-            cropping the data
+            a list of (x, y) points, ex. [(x1, y1), ...]
+            geojson Polygon object
+            shapely Polygon object
+            shapefile Polygon shape
+            flopy Polygon shape
 
         invert : bool
             Default value is False. If invert is True then the
@@ -519,14 +622,14 @@ class Raster(object):
 
         Parameters
         ----------
-        polygon : (shapely.geometry.Polygon or GeoJSON-like dict)
-            The values should be a GeoJSON-like dict or object
-            implements the Python geo interface protocal.
+        polygon : list, geojson, shapely.geometry, shapefile.Shape
+            _sample_rio_dataset method accepts any of these geometries:
 
-            Alternatively if the user supplies the vectors
-            of a polygon in the format [(x0, y0), ..., (xn, yn)]
-            a single shapely polygon will be created for
-            cropping the data
+            a list of (x, y) points, ex. [(x1, y1), ...]
+            geojson Polygon object
+            shapely Polygon object
+            shapefile Polygon shape
+            flopy Polygon shape
 
         invert : bool
             Default value is False. If invert is True then the
@@ -546,20 +649,13 @@ class Raster(object):
         else:
             from rasterio.mask import mask
 
-        if shapely is None:
-            msg = (
-                "Raster()._sample_rio_dataset(): error "
-                + 'importing shapely - try "pip install shapely"'
-            )
-            raise ImportError(msg)
-        else:
-            from shapely import geometry
+        from .geospatial_utils import GeoSpatialUtil
 
-        if isinstance(polygon, list) or isinstance(polygon, np.ndarray):
-            shapes = [geometry.Polygon([[x, y] for x, y in polygon])]
+        if isinstance(polygon, (list, tuple, np.ndarray)):
+            polygon = [polygon]
 
-        else:
-            shapes = [polygon]
+        geom = GeoSpatialUtil(polygon, shapetype="Polygon")
+        shapes = [geom]
 
         rstr_crp, rstr_crp_affine = mask(
             self._dataset, shapes, crop=True, invert=invert
@@ -586,14 +682,14 @@ class Raster(object):
 
         Parameters
         ----------
-        polygon : (shapely.geometry.Polygon or GeoJSON-like dict)
-            The values should be a GeoJSON-like dict or object
-            implements the Python geo interface protocal.
+        polygon : list, geojson, shapely.geometry, shapefile.Shape
+            _intersection method accepts any of these geometries:
 
-            Alternatively if the user supplies the vectors
-            of a polygon in the format [(x0, y0), ..., (xn, yn)]
-            a single shapely polygon will be created for
-            cropping the data
+            a list of (x, y) points, ex. [(x1, y1), ...]
+            geojson Polygon object
+            shapely Polygon object
+            shapefile Polygon shape
+            flopy Polygon shape
 
         invert : bool
             Default value is False. If invert is True then the
@@ -604,36 +700,14 @@ class Raster(object):
             mask : np.ndarray (dtype = bool)
 
         """
-        if shapely is None:
-            msg = (
-                "Raster()._intersection(): error "
-                + 'importing shapely try "pip install shapely"'
-            )
-            raise ImportError(msg)
-        else:
-            from shapely import geometry
+        from .geospatial_utils import GeoSpatialUtil
 
-        # step 1: check the data type in shapes
-        if isinstance(polygon, geometry.Polygon):
-            polygon = list(polygon.exterior.coords)
+        if isinstance(polygon, (list, tuple, np.ndarray)):
+            polygon = [polygon]
 
-        elif isinstance(polygon, dict):
-            # geojson, get coordinates=
-            if polygon["geometry"]["type"].lower() == "polygon":
-                polygon = [
-                    [x, y] for x, y in polygon["geometry"]["coordinates"]
-                ]
+        geom = GeoSpatialUtil(polygon, shapetype="Polygon")
 
-            else:
-                raise TypeError("Shape type must be a polygon")
-
-        elif isinstance(polygon, np.ndarray):
-            # numpy array, change to a list
-            polygon = list(polygon)
-
-        else:
-            # this is a list of coordinates
-            pass
+        polygon = geom.points[0]
 
         # step 2: create a grid of centoids
         xc = self.xcenters
@@ -643,58 +717,6 @@ class Raster(object):
         mask = self._point_in_polygon(xc, yc, polygon)
         if invert:
             mask = np.invert(mask)
-
-        return mask
-
-    @staticmethod
-    def _point_in_polygon(xc, yc, polygon):
-        """
-        Use the ray casting algorithm to determine if a point
-        is within a polygon. Enables very fast
-        intersection calculations!
-
-        Parameters
-        ----------
-        xc : np.ndarray
-            array of xpoints
-        yc : np.ndarray
-            array of ypoints
-        polygon : iterable (list)
-            polygon vertices [(x0, y0),....(xn, yn)]
-            note: polygon can be open or closed
-
-        Returns
-        -------
-        mask: np.array
-            True value means point is in polygon!
-
-        """
-        x0, y0 = polygon[0]
-        xt, yt = polygon[-1]
-
-        # close polygon if it isn't already
-        if (x0, y0) != (xt, yt):
-            polygon.append((x0, y0))
-
-        ray_count = np.zeros(xc.shape, dtype=int)
-        num = len(polygon)
-        j = num - 1
-        for i in range(num):
-
-            tmp = polygon[i][0] + (polygon[j][0] - polygon[i][0]) * (
-                yc - polygon[i][1]
-            ) / (polygon[j][1] - polygon[i][1])
-
-            comp = np.where(
-                ((polygon[i][1] > yc) ^ (polygon[j][1] > yc)) & (xc < tmp)
-            )
-
-            j = i
-            if len(comp[0]) > 0:
-                ray_count[comp[0], comp[1]] += 1
-
-        mask = np.ones(xc.shape, dtype=bool)
-        mask[ray_count % 2 == 0] = False
 
         return mask
 
@@ -727,6 +749,7 @@ class Raster(object):
 
         if masked:
             for v in self.nodatavals:
+                array = array.astype(float)
                 array[array == v] = np.nan
 
         return array
@@ -756,8 +779,8 @@ class Raster(object):
             for band, arr in self.__arr_dict.items():
                 foo.write(arr, band)
 
-    @classmethod
-    def load(cls, raster):
+    @staticmethod
+    def load(raster):
         """
         Static method to load a raster file
         into the raster object
@@ -783,7 +806,7 @@ class Raster(object):
         bands = dataset.indexes
         meta = dataset.meta
 
-        return cls(
+        return Raster(
             array,
             bands,
             meta["crs"],

@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 
 try:
@@ -31,6 +32,7 @@ class VertexGrid(Grid):
     ----------
     get_cell_vertices(cellid)
         returns vertices for a single cell at cellid.
+
     """
 
     def __init__(
@@ -51,7 +53,7 @@ class VertexGrid(Grid):
         ncpl=None,
         cell1d=None,
     ):
-        super(VertexGrid, self).__init__(
+        super().__init__(
             "vertex",
             top,
             botm,
@@ -90,7 +92,7 @@ class VertexGrid(Grid):
         if (
             self._vertices is not None
             and (self._cell2d is not None or self._cell1d is not None)
-            and super(VertexGrid, self).is_complete
+            and super().is_complete
         ):
             return True
         return False
@@ -110,6 +112,8 @@ class VertexGrid(Grid):
             return len(self._cell1d)
         if self._botm is not None:
             return len(self._botm[0])
+        if self._cell2d is not None and self._nlay is None:
+            return len(self._cell2d)
         else:
             return self._ncpl
 
@@ -194,6 +198,34 @@ class VertexGrid(Grid):
         else:
             return self._cache_dict[cache_index].data_nocopy
 
+    @property
+    def map_polygons(self):
+        """
+        Get a list of matplotlib Polygon patches for plotting
+
+        Returns
+        -------
+            list of Polygon objects
+        """
+        try:
+            import matplotlib.path as mpath
+        except ImportError:
+            raise ImportError("matplotlib required to use this method")
+        cache_index = "xyzgrid"
+        if (
+            cache_index not in self._cache_dict
+            or self._cache_dict[cache_index].out_of_date
+        ):
+            self.xyzvertices
+            self._polygons = None
+        if self._polygons is None:
+            self._polygons = [
+                mpath.Path(self.get_cell_vertices(nn))
+                for nn in range(self.ncpl)
+            ]
+
+        return copy.copy(self._polygons)
+
     def intersect(self, x, y, local=False, forgive=False):
         """
         Get the CELL2D number of a point with coordinates x and y
@@ -228,7 +260,7 @@ class VertexGrid(Grid):
 
         if local:
             # transform x and y to real-world coordinates
-            x, y = super(VertexGrid, self).get_coords(x, y)
+            x, y = super().get_coords(x, y)
         xv, yv, zv = self.xyzvertices
         for icell2d in range(self.ncpl):
             xa = np.array(xv[icell2d])
@@ -261,6 +293,15 @@ class VertexGrid(Grid):
         Returns
         ------- list of x,y cell vertices
         """
+        while cellid >= self.ncpl:
+            if cellid > self.nnodes:
+                err = "cellid {} out of index for size {}".format(
+                    cellid, self.nnodes
+                )
+                raise IndexError(err)
+
+            cellid -= self.ncpl
+
         self._copy_cache = False
         cell_verts = list(zip(self.xvertices[cellid], self.yvertices[cellid]))
         self._copy_cache = True
@@ -360,52 +401,77 @@ class VertexGrid(Grid):
             yvertices = yvertxform
 
         self._cache_dict[cache_index_cc] = CachedData(
-            [xcenters, ycenters, zcenters]
+            [np.array(xcenters), np.array(ycenters), np.array(zcenters)]
         )
         self._cache_dict[cache_index_vert] = CachedData(
             [xvertices, yvertices, zvertices]
         )
 
+    def get_xvertices_for_layer(self, layer):
+        xgrid = np.array(self.xvertices, dtype=object)
+        return xgrid
 
-if __name__ == "__main__":
-    import os
-    import flopy as fp
+    def get_yvertices_for_layer(self, layer):
+        ygrid = np.array(self.yvertices, dtype=object)
+        return ygrid
 
-    ws = "../../examples/data/mf6/test003_gwfs_disv"
-    name = "mfsim.nam"
+    def get_xcellcenters_for_layer(self, layer):
+        xcenters = np.array(self.xcellcenters)
+        return xcenters
 
-    sim = fp.mf6.modflow.MFSimulation.load(sim_name=name, sim_ws=ws)
+    def get_ycellcenters_for_layer(self, layer):
+        ycenters = np.array(self.ycellcenters)
+        return ycenters
 
-    print(sim.model_names)
-    ml = sim.get_model("gwf_1")
+    def get_number_plottable_layers(self, a):
+        """
+        Calculate and return the number of 2d plottable arrays that can be
+        obtained from the array passed (a)
 
-    dis = ml.dis
+        Parameters
+        ----------
+        a : ndarray
+            array to check for plottable layers
 
-    t = VertexGrid(
-        dis.vertices.array,
-        dis.cell2d.array,
-        top=dis.top.array,
-        botm=dis.botm.array,
-        idomain=dis.idomain.array,
-        epsg=26715,
-        xoff=0,
-        yoff=0,
-        angrot=45,
-    )
+        Returns
+        -------
+        nplottable : int
+            number of plottable layers
 
-    sr_x = t.xvertices
-    sr_y = t.yvertices
-    sr_xc = t.xcellcenters
-    sr_yc = t.ycellcenters
-    sr_lc = t.grid_lines
-    sr_e = t.extent
+        """
+        nplottable = 0
+        required_shape = self.get_plottable_layer_shape()
+        if a.shape == required_shape:
+            nplottable = 1
+        else:
+            nplottable = a.size / self.ncpl
+            nplottable = int(nplottable)
+        return nplottable
 
-    t.use_ref_coords = False
-    x = t.xvertices
-    y = t.yvertices
-    z = t.zvertices
-    xc = t.xcellcenters
-    yc = t.ycellcenters
-    zc = t.zcellcenters
-    lc = t.grid_lines
-    e = t.extent
+    def get_plottable_layer_array(self, a, layer):
+        # ensure plotarray is 1d with length ncpl
+        required_shape = self.get_plottable_layer_shape()
+        if a.ndim == 3:
+            if a.shape[0] == 1:
+                a = np.squeeze(a, axis=0)
+                plotarray = a[layer, :]
+            elif a.shape[1] == 1:
+                a = np.squeeze(a, axis=1)
+                plotarray = a[layer, :]
+            else:
+                raise Exception(
+                    "Array has 3 dimensions so one of them must be of size 1 "
+                    "for a VertexGrid."
+                )
+        elif a.ndim == 2:
+            plotarray = a[layer, :]
+        elif a.ndim == 1:
+            plotarray = a
+            if plotarray.shape[0] == self.nnodes:
+                plotarray = plotarray.reshape(self.nlay, self.ncpl)
+                plotarray = plotarray[layer, :]
+        else:
+            raise Exception("Array to plot must be of dimension 1 or 2")
+        msg = "{} /= {}".format(plotarray.shape[0], required_shape)
+        assert plotarray.shape == required_shape, msg
+        return plotarray

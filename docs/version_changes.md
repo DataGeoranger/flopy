@@ -1,9 +1,55 @@
 FloPy Changes
 -----------------------------------------------
-### Version 3.3.2
+### Version 3.3.3
+
+* New features:
+
+    * [feat(voronoi)](https://github.com/modflowpy/flopy/commit/71162aef76ad025c42753e82ddee14bdeef1fd22): Add voronoigrid class (#1034). Committed by langevin-usgs on 2021-01-05.
+    * [feat(unstructured)](https://github.com/modflowpy/flopy/commit/0f7a0f033ba0bdff19621e824e721d032a6d1313): Improve unstructured grid support for modflow 6 and modflow-usg (#1021). Committed by langevin-usgs on 2020-11-27.
+
 
 * Bug fixes:
 
+    * [fix(createpackages)](https://github.com/modflowpy/flopy/commit/8a2cffb052d0c33a4699edb9554b039fa871f00f): Avoid creating invalid escape characters (#1055). Committed by Mike Taves on 2021-02-17.
+    * [fix(DeprecationWarning)](https://github.com/modflowpy/flopy/commit/7d36b1c7f67a9eddeda122644295cf23c0573c8d): Use collections.abc module instead of collections (#1057). Committed by Mike Taves on 2021-02-15.
+    * [fix(DeprecationWarning)](https://github.com/modflowpy/flopy/commit/39c0ecba20bd54f2eafd8350151e60efbcc5c162): Related to numpy (#1058). Committed by Mike Taves on 2021-02-15.
+    * [fix(numpy)](https://github.com/modflowpy/flopy/commit/943ace46c686cbdbfdc327a3016da5942211ab7e): Aliases of builtin types is deprecated as of numpy 1.20 (#1052). Committed by Mike Taves on 2021-02-11.
+    * [fix()](https://github.com/modflowpy/flopy/commit/3ccdd57e390b94c4f23daa3d46554efd39e8ec9d): fix(get_active) include the cbd layers when checking layer thickness before BAS is loaded (#1051). Committed by Michael Ou on 2021-02-08.
+    * [fix(dis)](https://github.com/modflowpy/flopy/commit/5bfdf715514bbefd3f9d9a2e79d5c486e48f1896): Fix for dis.get_lrc() and dis.get_node() (#1049). Committed by langevin-usgs on 2021-02-04.
+    * [fix()](https://github.com/modflowpy/flopy/commit/3088e51bb546afc5a68103a81821c750480263b7): fix(modflow/mflpf) mfusg unstructured lpf ikcflag addition (#1044). Committed by Chris Nicol on 2021-02-01.
+    * [fix(print MFArray)](https://github.com/modflowpy/flopy/commit/b8322ddc52241d3c2a49c4ebdf2e8865c6f36bb9): Fixed printing of layered arrays - issue #1043 (#1045). Committed by spaulins-usgs on 2021-01-29.
+    * [fix(GridIntersect)](https://github.com/modflowpy/flopy/commit/369942c7ed3171927f50a20c27b951ed062eb0e1): Fix vertices for offset grids (#1037). Committed by Davíd Brakenhoff on 2021-01-13.
+    * [fix(PlotMapView.plot_array())](https://github.com/modflowpy/flopy/commit/7cb429f81a9206fa450cceff21c695faf01fce41): Fix value masking code for masked_values parameter (#1026). Committed by Joshua Larsen on 2020-12-03.
+    * [fix(sfr ic option)](https://github.com/modflowpy/flopy/commit/0ab929e01fdf2a2205d268e51364630d9bbaf9c5): Made ic optional and updated description (#1020). Committed by spaulins-usgs on 2020-11-27.
+
+### Version 3.3.2
+
+* New features:
+
+    * [feat(mf6)](https://github.com/modflowpy/flopy/commit/133f07fe2c0c418aa139ddae1429605ef5a1f253): Update t503 autotest to use mf6examples zip file (#1007). Committed by jdhughes-usgs on 2020-10-21.
+    * [feat(mf6)](https://github.com/modflowpy/flopy/commit/0bc91e4c2873ee2783968fd28b98c67c883457c0): Add modflow 6 gwt dfn and classes (#1006). Committed by jdhughes-usgs on 2020-10-21.
+    * [feat(geospatial_util)](https://github.com/modflowpy/flopy/commit/9ad6732c4b0c9cf26cf2deac0d95fee2d6859f97): Geospatial consolidation utilities (#1002). Committed by Joshua Larsen on 2020-10-19.
+    * [feat(cvfdutil)](https://github.com/modflowpy/flopy/commit/fdcc35ff5a7e7a809d7d10eff914881351a8f738): Capability to create disv nested grids (#997). Committed by langevin-usgs on 2020-10-02.
+    * [feat(cellid not as tuple)](https://github.com/modflowpy/flopy/commit/2763a1d5ef0a886582d682cc27f02f4a5cb52693): List data input now accepts cellids as separate integers (#976). Committed by spaulins-usgs on 2020-08-27.
+    * [feat(set_all_data_external) ](https://github.com/modflowpy/flopy/commit/46e041bc01e47b65ea8ba0420609cecc52ff74c0): New check_data option  (#966). Committed by spaulins-usgs on 2020-08-17.
+
+
+* Bug fixes:
+
+    * [fix(gridintersect)](https://github.com/modflowpy/flopy/commit/5091182a7c71d30bf0b62e2e257cb13b4652d7cf): Use linestrings and structured grid (#996). Committed by Tom van Steijn on 2020-09-25.
+    * [fix()](https://github.com/modflowpy/flopy/commit/44d8b5b68c6624b5c20e78e2e7652c7429ba088a): fix(extraneous blocks and zero length data in a list)  (#990). Committed by spaulins-usgs on 2020-09-03.
+    * [fix(internal)](https://github.com/modflowpy/flopy/commit/af28ed8ffc7e6d6fd19d82a3f9a1d496514ef6b7): Flopy fixed to correctly reads in internal keyword when no multiplier supplied. also, header line added to package files. (#962). Committed by spaulins-usgs on 2020-08-13.
+    * [fix(mfsfr2.py](https://github.com/modflowpy/flopy/commit/573da13fd8a8069ea3d8fb189d8033eb20fc4eed): Find_path): wrap find_path() so that the routing dictionary (graph) can still be copied, but won't be copied with every call of find_path() as it recursively finds the routing connections along a path in the sfr network. this was severely impacting performance for large sfr networks. (#955). Committed by aleaf on 2020-08-11.
+    * [fix(#958)](https://github.com/modflowpy/flopy/commit/2fd9326534d2782428111ae47dfac1af0c21e04d): Fix gridintersect._vtx_grid_to_shape_generator rtree for cells with more than 3 vertices (#959). Committed by mkennard-aquaveo on 2020-08-07.
+    * [fix(GridIntersect)](https://github.com/modflowpy/flopy/commit/a6b6c57150e9b28022bdc878090d0f1f9b0af261): Fix crash intersecting 3d points that are outside… (#957). Committed by mkennard-aquaveo on 2020-08-05.
+    * [fix(mvr)](https://github.com/modflowpy/flopy/commit/49b4aa27e84c8307e8ff15cc6d1a661031af6776): Added documentation explaining the difference between the two flopy mvr classes (#950). Committed by spaulins-usgs on 2020-07-31.
+    * [fix(check)](https://github.com/modflowpy/flopy/commit/cd81a0911374eb1af2a9fd5ab31a3c6df7baf675): Get_active() error for confining bed layers (#937). Committed by Michael Ou on 2020-07-29.
+    * [fix(rcha and evta)](https://github.com/modflowpy/flopy/commit/3640b1a15667b30b04a21a0ba55b6c063747a1b6): Irch and ievt arrays now zero based.  fix for issue #941.  also changed createpackages.py to always produce python scripts with unix-style line endings. (#949). Committed by spaulins-usgs on 2020-07-29.
+    * [fix(lgrutil)](https://github.com/modflowpy/flopy/commit/3e7e3679deb0d440a139a6d2a71ad174c4d65a12): Corrected bug in child to parent vertical exchanges (#948). Committed by langevin-usgs on 2020-07-27.
+    * [fix(time series slowness)](https://github.com/modflowpy/flopy/commit/47572f0ecbc024df1dfa57bcdff11175416f6f26): Speeds up performance when a large number of time series are used by a single stress package (#943). Committed by spaulins-usgs on 2020-07-17.
+    * [fix](https://github.com/modflowpy/flopy/commit/d16411dda8eae387da3bfbb8c2c9a32d069711e6): Restore python 3.5 compatibility (modulenotfounderror -> importerror) (#933). Committed by Mike Taves on 2020-07-09.
+    * [fix(read binary file)](https://github.com/modflowpy/flopy/commit/f437e8bcd135fee09e6fd4aa7d4691e589ab39c0): Fix for reading binary files with array data (#931). Committed by spaulins-usgs on 2020-06-30.
+    * [fix(idomain)](https://github.com/modflowpy/flopy/commit/27e4191875a59c09a2339a481d84f1052c89f0f3): Data checks now treat all positive idomain values as active  (#929). Committed by spaulins-usgs on 2020-06-29.
     * [fix(Modpath7Sim)](https://github.com/modflowpy/flopy/commit/b27fccdee589c772e6e66160f27d60a8dd485645): Fix timepointinterval calculation for timepointoption 3 (#927). Committed by jdhughes-usgs on 2020-06-26.
 
 ### Version 3.3.1

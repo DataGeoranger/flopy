@@ -1,5 +1,6 @@
 # DO NOT MODIFY THIS FILE DIRECTLY.  THIS FILE MUST BE CREATED BY
 # mf6/utils/createpackages.py
+# FILE created on March 19, 2021 03:08:37 UTC
 from .. import mfpackage
 from ..data.mfdatautil import ListTemplateGenerator
 
@@ -114,11 +115,11 @@ class ModflowGwfsfr(mfpackage.MFPackage):
           working with FloPy and Python. Flopy will automatically subtract one
           when loading index variables and add one when writing index
           variables.
-        * cellid ((integer, ...)) The keyword `NONE' must be specified for
+        * cellid ((integer, ...)) The keyword 'NONE' must be specified for
           reaches that are not connected to an underlying GWF cell. The keyword
-          `NONE' is used for reaches that are in cells that have IDOMAIN values
+          'NONE' is used for reaches that are in cells that have IDOMAIN values
           less than one or are in areas not covered by the GWF model grid.
-          Reach-aquifer flow is not calculated if the keyword `NONE' is
+          Reach-aquifer flow is not calculated if the keyword 'NONE' is
           specified. This argument is an index variable, which means that it
           should be treated as zero-based when working with FloPy and Python.
           Flopy will automatically subtract one when loading index variables
@@ -132,18 +133,20 @@ class ModflowGwfsfr(mfpackage.MFPackage):
         * rtp (double) real value that defines the top elevation of the reach
           streambed.
         * rbth (double) real value that defines the thickness of the reach
-          streambed. RBTH can be any value if CELLID is `NONE'. Otherwise, RBTH
+          streambed. RBTH can be any value if CELLID is 'NONE'. Otherwise, RBTH
           must be greater than zero.
         * rhk (double) real value that defines the hydraulic conductivity of
           the reach streambed. RHK can be any positive value if CELLID is
-          `NONE'. Otherwise, RHK must be greater than zero.
+          'NONE'. Otherwise, RHK must be greater than zero.
         * man (string) real or character value that defines the Manning's
           roughness coefficient for the reach. MAN must be greater than zero.
           If the Options block includes a TIMESERIESFILE entry (see the "Time-
           Variable Input" section), values can be obtained from a time series
           by entering the time-series name in place of a numeric value.
         * ncon (integer) integer value that defines the number of reaches
-          connected to the reach.
+          connected to the reach. If a value of zero is specified for NCON an
+          entry for RNO is still required in the subsequent CONNECTIONDATA
+          block.
         * ustrf (double) real value that defines the fraction of upstream flow
           from each upstream reach that is applied as upstream inflow to the
           reach. The sum of all USTRF values for all reaches connected to the
@@ -184,10 +187,11 @@ class ModflowGwfsfr(mfpackage.MFPackage):
           current reach. Positive IC numbers indicate connected reaches are
           connected to the upstream end of the current reach. The absolute
           value of IC must be greater than zero and less than or equal to
-          NREACHES. This argument is an index variable, which means that it
-          should be treated as zero-based when working with FloPy and Python.
-          Flopy will automatically subtract one when loading index variables
-          and add one when writing index variables.
+          NREACHES. IC should not be specified when NCON is zero but must be
+          specified otherwise. This argument is an index variable, which means
+          that it should be treated as zero-based when working with FloPy and
+          Python. Flopy will automatically subtract one when loading index
+          variables and add one when writing index variables.
     diversions : [rno, idv, iconr, cprior]
         * rno (integer) integer value that defines the reach number associated
           with the specified DIVERSIONS data on the line. RNO must be greater
@@ -220,23 +224,23 @@ class ModflowGwfsfr(mfpackage.MFPackage):
           water is available to meet all diversion stipulations, and is used in
           conjunction with the value of FLOW value specified in the
           STRESS_PERIOD_DATA section. Available diversion options include: (1)
-          CPRIOR = `FRACTION', then the amount of the diversion is computed as
+          CPRIOR = 'FRACTION', then the amount of the diversion is computed as
           a fraction of the streamflow leaving reach RNO (:math:`Q_{DS}`); in
           this case, 0.0 :math:`\\le` DIVFLOW :math:`\\le` 1.0. (2) CPRIOR =
-          `EXCESS', a diversion is made only if :math:`Q_{DS}` for reach RNO
+          'EXCESS', a diversion is made only if :math:`Q_{DS}` for reach RNO
           exceeds the value of DIVFLOW. If this occurs, then the quantity of
           water diverted is the excess flow (:math:`Q_{DS} -` DIVFLOW) and
           :math:`Q_{DS}` from reach RNO is set equal to DIVFLOW. This
           represents a flood-control type of diversion, as described by Danskin
-          and Hanson (2002). (3) CPRIOR = `THRESHOLD', then if :math:`Q_{DS}`
+          and Hanson (2002). (3) CPRIOR = 'THRESHOLD', then if :math:`Q_{DS}`
           in reach RNO is less than the specified diversion flow (DIVFLOW), no
           water is diverted from reach RNO. If :math:`Q_{DS}` in reach RNO is
           greater than or equal to (DIVFLOW), (DIVFLOW) is diverted and
           :math:`Q_{DS}` is set to the remainder (:math:`Q_{DS} -` DIVFLOW)).
           This approach assumes that once flow in the stream is sufficiently
-          low, diversions from the stream cease, and is the `priority'
+          low, diversions from the stream cease, and is the 'priority'
           algorithm that originally was programmed into the STR1 Package
-          (Prudic, 1989). (4) CPRIOR = `UPTO' -- if :math:`Q_{DS}` in reach RNO
+          (Prudic, 1989). (4) CPRIOR = 'UPTO' -- if :math:`Q_{DS}` in reach RNO
           is greater than or equal to the specified diversion flow (DIVFLOW),
           :math:`Q_{DS}` is reduced by DIVFLOW. If :math:`Q_{DS}` in reach RNO
           is less than (DIVFLOW), DIVFLOW is set to :math:`Q_{DS}` and there
@@ -830,6 +834,7 @@ class ModflowGwfsfr(mfpackage.MFPackage):
             "tagged false",
             "in_record true",
             "reader urword",
+            "optional true",
             "numeric_index true",
             "support_negative_index true",
         ],
@@ -1100,7 +1105,7 @@ class ModflowGwfsfr(mfpackage.MFPackage):
         pname=None,
         parent_file=None,
     ):
-        super(ModflowGwfsfr, self).__init__(
+        super().__init__(
             model, "sfr", filename, pname, loading_package, parent_file
         )
 

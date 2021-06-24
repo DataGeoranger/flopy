@@ -1,5 +1,6 @@
 # DO NOT MODIFY THIS FILE DIRECTLY.  THIS FILE MUST BE CREATED BY
 # mf6/utils/createpackages.py
+# FILE created on March 19, 2021 03:08:37 UTC
 from .. import mfpackage
 from ..data.mfdatautil import ListTemplateGenerator
 
@@ -119,15 +120,44 @@ class ModflowIms(mfpackage.MFPackage):
           routine. For a linear problem OUTER_MAXIMUM should be 1.
     under_relaxation : string
         * under_relaxation (string) is an optional keyword that defines the
-          nonlinear under-relaxation schemes used. By default under-relaxation
-          is not used. NONE - under-relaxation is not used. SIMPLE - Simple
-          under-relaxation scheme with a fixed relaxation factor is used.
-          COOLEY - Cooley under-relaxation scheme is used. DBD - delta-bar-
-          delta under-relaxation is used. Note that the under-relaxation
-          schemes are used in conjunction with problems that use the Newton-
-          Raphson formulation, however, experience has indicated that the
-          Cooley under-relaxation and damping work well also for the Picard
-          scheme with the wet/dry options of MODFLOW 6.
+          nonlinear under-relaxation schemes used. Under-relaxation is also
+          known as dampening, and is used to reduce the size of the calculated
+          dependent variable before proceeding to the next outer iteration.
+          Under-relaxation can be an effective tool for highly nonlinear models
+          when there are large and often counteracting changes in the
+          calculated dependent variable between successive outer iterations. By
+          default under-relaxation is not used. NONE - under-relaxation is not
+          used (default). SIMPLE - Simple under-relaxation scheme with a fixed
+          relaxation factor (UNDER_RELAXATION_GAMMA) is used. COOLEY - Cooley
+          under-relaxation scheme is used. DBD - delta-bar-delta under-
+          relaxation is used. Note that the under-relaxation schemes are often
+          used in conjunction with problems that use the Newton-Raphson
+          formulation, however, experience has indicated that they also work
+          well non-Newton problems, such as those with the wet/dry options of
+          MODFLOW 6.
+    under_relaxation_gamma : double
+        * under_relaxation_gamma (double) real value defining either the
+          relaxation factor for the SIMPLE scheme or the history or memory term
+          factor of the Cooley and delta-bar-delta algorithms. For the SIMPLE
+          scheme, a value of one indicates that there is no under-relaxation
+          and the full head change is applied. This value can be gradually
+          reduced from one as a way to improve convergence; for well behaved
+          problems, using a value less than one can increase the number of
+          outer iterations required for convergence and needlessly increase run
+          times. UNDER_RELAXATION_GAMMA must be greater than zero for the
+          SIMPLE scheme or the program will terminate with an error. For the
+          Cooley and delta-bar-delta schemes, UNDER_RELAXATION_GAMMA is a
+          memory term that can range between zero and one. When
+          UNDER_RELAXATION_GAMMA is zero, only the most recent history
+          (previous iteration value) is maintained. As UNDER_RELAXATION_GAMMA
+          is increased, past history of iteration changes has greater influence
+          on the memory term. The memory term is maintained as an exponential
+          average of past changes. Retaining some past history can overcome
+          granular behavior in the calculated function surface and therefore
+          helps to overcome cyclic patterns of non-convergence. The value
+          usually ranges from 0.1 to 0.3; a value of 0.2 works well for most
+          problems. UNDER_RELAXATION_GAMMA only needs to be specified if
+          UNDER_RELAXATION is not NONE.
     under_relaxation_theta : double
         * under_relaxation_theta (double) real value defining the reduction
           factor for the learning rate (under-relaxation term) of the delta-
@@ -148,20 +178,6 @@ class ModflowIms(mfpackage.MFPackage):
           UNDER_RELAXATION_KAPPA. The value usually ranges from 0.03 to 0.3; a
           value of 0.1 works well for most problems. UNDER_RELAXATION_KAPPA
           only needs to be specified if UNDER_RELAXATION is DBD.
-    under_relaxation_gamma : double
-        * under_relaxation_gamma (double) real value defining the history or
-          memory term factor of the delta-bar-delta algorithm.
-          UNDER_RELAXATION_GAMMA is between zero and 1 but cannot be equal to
-          one. When UNDER_RELAXATION_GAMMA is zero, only the most recent
-          history (previous iteration value) is maintained. As
-          UNDER_RELAXATION_GAMMA is increased, past history of iteration
-          changes has greater influence on the memory term. The memory term is
-          maintained as an exponential average of past changes. Retaining some
-          past history can overcome granular behavior in the calculated
-          function surface and therefore helps to overcome cyclic patterns of
-          non-convergence. The value usually ranges from 0.1 to 0.3; a value of
-          0.2 works well for most problems. UNDER_RELAXATION_GAMMA only needs
-          to be specified if UNDER_RELAXATION is not NONE.
     under_relaxation_momentum : double
         * under_relaxation_momentum (double) real value defining the fraction
           of past history changes that is added as a momentum term to the step
@@ -186,8 +202,8 @@ class ModflowIms(mfpackage.MFPackage):
           residual increases, while a low value serves to control step size
           more severely. The value usually ranges from 1.0 to 10:math:`^6`; a
           value of 10:math:`^4` works well for most problems but lower values
-          like 1.1 may be required for harder problems. BACKTRACKING\_TOLERANCE
-          only needs to be specified if BACKTRACKING\_NUMBER is greater than
+          like 1.1 may be required for harder problems. BACKTRACKING_TOLERANCE
+          only needs to be specified if BACKTRACKING_NUMBER is greater than
           zero.
     backtracking_reduction_factor : double
         * backtracking_reduction_factor (double) real value defining the
@@ -215,9 +231,9 @@ class ModflowIms(mfpackage.MFPackage):
           for convergence of the inner (linear) iterations, in units of length.
           When the maximum absolute value of the head change at all nodes
           during an iteration is less than or equal to INNER_HCLOSE, the matrix
-          solver assumes convergence. Commonly, INNER_HCLOSE is set an order of
-          magnitude less than the OUTER_HCLOSE value specified for the
-          NONLINEAR block. The INNER_HCLOSE keyword has been deprecated in
+          solver assumes convergence. Commonly, INNER_HCLOSE is set equal to or
+          an order of magnitude less than the OUTER_HCLOSE value specified for
+          the NONLINEAR block. The INNER_HCLOSE keyword has been deprecated in
           favor of the more general INNER_DVCLOSE (for dependent variable),
           however either one can be specified in order to maintain backward
           compatibility.
@@ -228,43 +244,44 @@ class ModflowIms(mfpackage.MFPackage):
           length for head). When the maximum absolute value of the dependent-
           variable change at all nodes during an iteration is less than or
           equal to INNER_DVCLOSE, the matrix solver assumes convergence.
-          Commonly, INNER_DVCLOSE is set an order of magnitude less than the
-          OUTER_DVCLOSE value specified for the NONLINEAR block. The keyword,
-          INNER_HCLOSE can be still be specified instead of INNER_DVCLOSE for
-          backward compatibility with previous versions of MODFLOW 6 but
-          eventually INNER_HCLOSE will be deprecated and specification of
-          INNER_HCLOSE will cause MODFLOW 6 to terminate with an error.
+          Commonly, INNER_DVCLOSE is set equal to or an order of magnitude less
+          than the OUTER_DVCLOSE value specified for the NONLINEAR block. The
+          keyword, INNER_HCLOSE can be still be specified instead of
+          INNER_DVCLOSE for backward compatibility with previous versions of
+          MODFLOW 6 but eventually INNER_HCLOSE will be deprecated and
+          specification of INNER_HCLOSE will cause MODFLOW 6 to terminate with
+          an error.
     rcloserecord : [inner_rclose, rclose_option]
         * inner_rclose (double) real value that defines the flow residual
           tolerance for convergence of the IMS linear solver and specific flow
           residual criteria used. This value represents the maximum allowable
           residual at any single node. Value is in units of length cubed per
-          time, and must be consistent with mf length and time units. Usually a
-          value of :math:`1.0 \\times 10^{-1}` is sufficient for the flow-
-          residual criteria when meters and seconds are the defined \mf length
-          and time.
+          time, and must be consistent with MODFLOW 6 length and time units.
+          Usually a value of :math:`1.0 \\times 10^{-1}` is sufficient for the
+          flow-residual criteria when meters and seconds are the defined
+          MODFLOW 6 length and time.
         * rclose_option (string) an optional keyword that defines the specific
           flow residual criterion used. STRICT--an optional keyword that is
           used to specify that INNER_RCLOSE represents a infinity-Norm
           (absolute convergence criteria) and that the dependent-variable (for
           example, head) and flow convergence criteria must be met on the first
           inner iteration (this criteria is equivalent to the criteria used by
-          the MODFLOW-2005 PCG package~citep{hill1990preconditioned}).
-          L2NORM_RCLOSE--an optional keyword that is used to specify that
-          INNER_RCLOSE represents a L-2 Norm closure criteria instead of a
-          infinity-Norm (absolute convergence criteria). When L2NORM_RCLOSE is
-          specified, a reasonable initial INNER_RCLOSE value is 0.1 times the
-          number of active cells when meters and seconds are the defined mf
-          length and time. RELATIVE_RCLOSE--an optional keyword that is used to
-          specify that INNER_RCLOSE represents a relative L-2 Norm reduction
-          closure criteria instead of a infinity-Norm (absolute convergence
-          criteria). When RELATIVE_RCLOSE is specified, a reasonable initial
-          INNER_RCLOSE value is :math:`1.0 \\times 10^{-4}` and convergence is
-          achieved for a given inner (linear) iteration when :math:`\\Delta h
-          \\le` INNER_DVCLOSE and the current L-2 Norm is :math:`\\le` the
-          product of the RELATIVE\_RCLOSE and the initial L-2 Norm for the
-          current inner (linear) iteration. If RCLOSE\_OPTION is not specified,
-          an absolute residual (infinity-norm) criterion is used.
+          the MODFLOW-2005 PCG package (Hill, 1990)). L2NORM_RCLOSE--an
+          optional keyword that is used to specify that INNER_RCLOSE represents
+          a L-2 Norm closure criteria instead of a infinity-Norm (absolute
+          convergence criteria). When L2NORM_RCLOSE is specified, a reasonable
+          initial INNER_RCLOSE value is 0.1 times the number of active cells
+          when meters and seconds are the defined MODFLOW 6 length and time.
+          RELATIVE_RCLOSE--an optional keyword that is used to specify that
+          INNER_RCLOSE represents a relative L-2 Norm reduction closure
+          criteria instead of a infinity-Norm (absolute convergence criteria).
+          When RELATIVE_RCLOSE is specified, a reasonable initial INNER_RCLOSE
+          value is :math:`1.0 \\times 10^{-4}` and convergence is achieved for
+          a given inner (linear) iteration when :math:`\\Delta h \\le`
+          INNER_DVCLOSE and the current L-2 Norm is :math:`\\le` the product of
+          the RELATIVE_RCLOSE and the initial L-2 Norm for the current inner
+          (linear) iteration. If RCLOSE_OPTION is not specified, an absolute
+          residual (infinity-norm) criterion is used.
     linear_acceleration : string
         * linear_acceleration (string) a keyword that defines the linear
           acceleration method used by the default IMS linear solvers. CG -
@@ -297,7 +314,7 @@ class ModflowIms(mfpackage.MFPackage):
           defines the drop tolerance used to drop preconditioner terms based on
           the magnitude of matrix entries in the ILUT and MILUT
           preconditioners. A value of :math:`10^{-4}` works well for most
-          problems. By default, PRECONDITIONER\_DROP\_TOLERANCE is zero and the
+          problems. By default, PRECONDITIONER_DROP_TOLERANCE is zero and the
           zero-fill incomplete LU factorization preconditioners (ILU(0) and
           MILU(0)) are used.
     number_orthogonalizations : integer
@@ -527,6 +544,13 @@ class ModflowIms(mfpackage.MFPackage):
         ],
         [
             "block nonlinear",
+            "name under_relaxation_gamma",
+            "type double precision",
+            "reader urword",
+            "optional true",
+        ],
+        [
+            "block nonlinear",
             "name under_relaxation_theta",
             "type double precision",
             "reader urword",
@@ -535,13 +559,6 @@ class ModflowIms(mfpackage.MFPackage):
         [
             "block nonlinear",
             "name under_relaxation_kappa",
-            "type double precision",
-            "reader urword",
-            "optional true",
-        ],
-        [
-            "block nonlinear",
-            "name under_relaxation_gamma",
             "type double precision",
             "reader urword",
             "optional true",
@@ -694,9 +711,9 @@ class ModflowIms(mfpackage.MFPackage):
         outer_rclosebnd=None,
         outer_maximum=None,
         under_relaxation=None,
+        under_relaxation_gamma=None,
         under_relaxation_theta=None,
         under_relaxation_kappa=None,
-        under_relaxation_gamma=None,
         under_relaxation_momentum=None,
         backtracking_number=None,
         backtracking_tolerance=None,
@@ -717,7 +734,7 @@ class ModflowIms(mfpackage.MFPackage):
         pname=None,
         parent_file=None,
     ):
-        super(ModflowIms, self).__init__(
+        super().__init__(
             simulation, "ims", filename, pname, loading_package, parent_file
         )
 
@@ -743,14 +760,14 @@ class ModflowIms(mfpackage.MFPackage):
         self.under_relaxation = self.build_mfdata(
             "under_relaxation", under_relaxation
         )
+        self.under_relaxation_gamma = self.build_mfdata(
+            "under_relaxation_gamma", under_relaxation_gamma
+        )
         self.under_relaxation_theta = self.build_mfdata(
             "under_relaxation_theta", under_relaxation_theta
         )
         self.under_relaxation_kappa = self.build_mfdata(
             "under_relaxation_kappa", under_relaxation_kappa
-        )
-        self.under_relaxation_gamma = self.build_mfdata(
-            "under_relaxation_gamma", under_relaxation_gamma
         )
         self.under_relaxation_momentum = self.build_mfdata(
             "under_relaxation_momentum", under_relaxation_momentum
